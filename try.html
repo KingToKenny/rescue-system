@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>救援物資智能分流 - Live Cam 追蹤</title>
+    <!-- 載入 TensorFlow.js 與 Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+    
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #121212; color: #fff; margin: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+        .header { width: 100%; background-color: #0056b3; padding: 15px 0; text-align: center; font-size: 22px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .card { background-color: #1e1e1e; border-radius: 15px; margin: 20px; padding: 20px; width: 85%; max-width: 400px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        #best-label { font-size: 45px; font-weight: 900; color: #4CAF50; margin: 10px 0; transition: color 0.3s; }
+        #webcam-container { border: 4px solid #333; border-radius: 10px; overflow: hidden; margin-top: 15px; display: flex; justify-content: center; position: relative; }
+        canvas { width: 100%; max-width: 100%; height: auto; display: block; }
+        .btn { background-color: #007bff; color: white; border: none; padding: 15px 40px; font-size: 20px; border-radius: 30px; margin: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,123,255,0.3); }
+        .btn:active { transform: scale(0.95); }
+        #status-log { font-size: 14px; color: #888; margin-top: 15px; text-align: left; background: #000; padding: 10px; border-radius: 8px; height: 60px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="header">救援物資 Live Cam 追蹤</div>
+
+    <button type="button" class="btn" onclick="init()" id="startBtn">🔴 啟動 Live Cam</button>
+
+    <div class="card" id="main-ui" style="display: none;">
+        <div style="color: #aaa; font-size: 16px;">目前鎖定物件：</div>
+        <div id="best-label">載入中...</div>
+        
+        <div id="webcam-container"></div>
+        
+        <div id="status-log">系統待命中...</div>
+    </div>
+
+    <script type="text/javascript">
+        // ==========================================
+        // ⚠️ 貼上你的 Teachable Machine 模型連結 (結尾需有 /)
+        // ==========================================
+        const URL = "https://teachablemachine.withgoogle.com/models/d20G0_Y49/";
+
+        let model, webcam, maxPredictions;
+        let isTracing = false;
+        
+        // 防連發機制參數
+        let lastSentLabel = ""; 
+        let lastSentTime = 0;
+        const cooldownTime = 2500; // 相同物件冷卻時間 (毫秒)
+
+        function logMessage(msg) {
+            const logDiv = document.getElementById("status-log");
+            const time = new Date().toLocaleTimeString('zh-HK', {hour12: false});
+            logDiv.innerHTML = `[${time}] ${msg}<br>` + logDiv.innerHTML;
+        }
+
+        async function init() {
+            try {
+                document.getElementById("startBtn").style.display = "none";
+                document.getElementById("main-ui").style.display = "block";
+                document.getElementById("best-label").innerText = "模型與相機啟動中...";
+
+                // 1. 載入 AI 模型
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                // 2. 啟動 Live Cam (設定為後置鏡頭)
+                const flip = false; // 手機後置鏡頭不需要翻轉
+                webcam = new tmImage.Webcam(300, 300, flip); 
+                await webcam.setup({ facingMode: "environment" }); 
+                await webcam.play();
+                
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                
+                isTracing = true;
+                logMessage("✅ Live Cam 啟動成功，開始追蹤");
+                window.requestAnimationFrame(loop);
+
+            } catch (error) {
+                document.getElementById("best-label").innerText = "啟動失敗";
+                document.getElementById("best-label").style.color = "#ff4444";
+                logMessage("❌ 錯誤: " + error.message);
+                document.getElementById("startBtn").style.display = "block";
+            }
+        }
+
+        // 即時追蹤迴圈
+        async function loop() {
+            if (!isTracing) return;
+            webcam.update(); // 更新鏡頭畫面
+            await predict(); // 進行預測
+            window.requestAnimationFrame(loop); // 呼叫下一個 frame
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            
+            let highestProb = 0;
+            let bestLabel = "未辨識";
+
+            // 尋找機率最高的物件
+            for (let i = 0; i < maxPredictions; i++) {
+                if (prediction[i].probability > highestProb && prediction[i].probability > 0.85) { // 85% 信心門檻
+                    highestProb = prediction[i].probability;
+                    bestLabel = prediction[i].className;
+                }
+            }
+
+            // 更新畫面 UI
+            const labelEl = document.getElementById("best-label");
+            labelEl.innerText = bestLabel;
+            
+            if (bestLabel === "未辨識") {
+                labelEl.style.color = "#aaaaaa";
+            } else {
+                labelEl.style.color = "#4CAF50";
+            }
+
+            // ==========================================
+            // ESP8266 馬達控制邏輯 (防連發)
+            // ==========================================
+            const currentTime = Date.now();
+            
+            // 如果辨識到物件，且 (跟上次不一樣 或 已經過了冷卻時間)
+            if (bestLabel !== "未辨識" && (bestLabel !== lastSentLabel || (currentTime - lastSentTime > cooldownTime))) {
+                
+                logMessage(`🎯 鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
+                sendCommandToESP8266(bestLabel);
+                
+                lastSentLabel = bestLabel;
+                lastSentTime = currentTime;
+            }
+        }
+        
+        function sendCommandToESP8266(label) {
+            // 替換成你的 ESP8266 IP
+            const espIP = "192.168.4.1"; 
+            const encodedLabel = encodeURIComponent(label); 
+            const url = `http://${espIP}/sort?item=${encodedLabel}`;
+            
+            // 在區網內發送 HTTP GET 請求
+            fetch(url, { mode: 'no-cors' }).catch(err => console.log(err));
+        }
+    </script>
+</body>
+</html>
