@@ -136,13 +136,15 @@
         }
         
         function sendCommandToESP8266(label) {
-            // 替換成你的 ESP8266 IP
             const espIP = "192.168.4.1"; 
             const encodedLabel = encodeURIComponent(label); 
             const url = `http://${espIP}/sort?item=${encodedLabel}`;
             
-            // 在區網內發送 HTTP GET 請求
-            fetch(url, { mode: 'no-cors' }).catch(err => console.log(err));
+            // 改用 Image 物件發送請求，繞過 fetch 的嚴格 CORS 與部分 HTTPS 限制
+            const img = new Image();
+            img.src = url;
+            
+            console.log("已嘗試發送指令:", url);
         }
     </script>
 </body>
