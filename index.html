@@ -136,7 +136,7 @@
         }
         
         function sendCommandToESP8266(label) {
-            const espIP = "192.168.4.1"; 
+            const espIP = "172.20.10.2"; 
             const encodedLabel = encodeURIComponent(label); 
             const url = `http://${espIP}/sort?item=${encodedLabel}`;
             
