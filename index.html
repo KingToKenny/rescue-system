@@ -150,15 +150,6 @@
                     lastSentLabel = bestLabel; 
                 }
             }
-                
-                else if (bestLabel !== lastSentLabel) {
-                    // 確認是 Drink 或 First Aid，且跟上一次發送的不同
-                    logMessage(`🎯 確認鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
-                    sendCommandToESP8266(bestLabel);
-                    
-                    lastSentLabel = bestLabel;
-                }
-            }
         }
         
         function sendCommandToESP8266(label) {
