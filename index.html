@@ -49,6 +49,11 @@
         let lastSentTime = 0;
         const cooldownTime = 2500; // 相同物件冷卻時間 (毫秒)
 
+        // 新增：防雜訊與連續確認機制變數
+        let consecutiveLabel = "";
+        let consecutiveCount = 0;
+        const REQUIRED_CONSECUTIVE = 5; // 設定需要連續辨識幾次才觸發
+
         function logMessage(msg) {
             const logDiv = document.getElementById("status-log");
             const time = new Date().toLocaleTimeString('zh-HK', {hour12: false});
@@ -109,29 +114,42 @@
                 }
             }
 
-            // 更新畫面 UI
-            const labelEl = document.getElementById("best-label");
-            labelEl.innerText = bestLabel;
-            
-            if (bestLabel === "未辨識") {
-                labelEl.style.color = "#aaaaaa";
+            // ==========================================
+            // 新增：連續相同結果確認邏輯
+            // ==========================================
+            if (bestLabel === consecutiveLabel) {
+                consecutiveCount++;
             } else {
-                labelEl.style.color = "#4CAF50";
+                consecutiveLabel = bestLabel;
+                consecutiveCount = 1; // 標籤改變，重新計算
+            }
+
+            // 更新畫面 UI (加入橘色的確認中狀態提示)
+            const labelEl = document.getElementById("best-label");
+            if (consecutiveCount < REQUIRED_CONSECUTIVE) {
+                labelEl.innerText = `${bestLabel} (確認中 ${consecutiveCount}/${REQUIRED_CONSECUTIVE})`;
+                labelEl.style.color = "#ff9800"; // 橘色代表確認中
+            } else {
+                labelEl.innerText = bestLabel;
+                labelEl.style.color = (bestLabel === "未辨識" || bestLabel === "Empty") ? "#aaaaaa" : "#4CAF50"; // 綠色代表已鎖定
             }
 
             // ==========================================
-            // ESP8266 馬達控制邏輯 (防連發)
+            // ESP8266 馬達控制邏輯 (必須連續 5 次 + 滿足球卻時間)
             // ==========================================
             const currentTime = Date.now();
             
-            // 如果辨識到物件，且 (跟上次不一樣 或 已經過了冷卻時間)
-            if (bestLabel !== "未辨識" && (bestLabel !== lastSentLabel || (currentTime - lastSentTime > cooldownTime))) {
-                
-                logMessage(`🎯 鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
-                sendCommandToESP8266(bestLabel);
-                
-                lastSentLabel = bestLabel;
-                lastSentTime = currentTime;
+            // 條件 1：連續次數達標
+            if (consecutiveCount >= REQUIRED_CONSECUTIVE) {
+                // 條件 2：不是未辨識，且 (跟上次不一樣 或 已經過了冷卻時間)
+                if (bestLabel !== "未辨識" && (bestLabel !== lastSentLabel || (currentTime - lastSentTime > cooldownTime))) {
+                    
+                    logMessage(`🎯 確認鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
+                    sendCommandToESP8266(bestLabel);
+                    
+                    lastSentLabel = bestLabel;
+                    lastSentTime = currentTime;
+                }
             }
         }
         
