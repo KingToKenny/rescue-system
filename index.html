@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>救援物資智能分流 - Live Cam 追蹤</title>
-    <!-- 載入 TensorFlow.js 與 Teachable Machine -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
     
@@ -29,30 +28,20 @@
     <div class="card" id="main-ui" style="display: none;">
         <div style="color: #aaa; font-size: 16px;">目前鎖定物件：</div>
         <div id="best-label">載入中...</div>
-        
         <div id="webcam-container"></div>
-        
         <div id="status-log">系統待命中...</div>
     </div>
 
     <script type="text/javascript">
-        // ==========================================
-        // ⚠️ 貼上你的 Teachable Machine 模型連結 (結尾需有 /)
-        // ==========================================
         const URL = "https://teachablemachine.withgoogle.com/models/PjfHAbN-H/";
 
         let model, webcam, maxPredictions;
         let isTracing = false;
         
-        // 防連發機制參數
         let lastSentLabel = ""; 
-        let lastSentTime = 0;
-        const cooldownTime = 2500; // 相同物件冷卻時間 (毫秒)
-
-        // 新增：防雜訊與連續確認機制變數
         let consecutiveLabel = "";
         let consecutiveCount = 0;
-        const REQUIRED_CONSECUTIVE = 5; // 設定需要連續辨識幾次才觸發
+        const REQUIRED_CONSECUTIVE = 5; 
 
         function logMessage(msg) {
             const logDiv = document.getElementById("status-log");
@@ -66,14 +55,12 @@
                 document.getElementById("main-ui").style.display = "block";
                 document.getElementById("best-label").innerText = "模型與相機啟動中...";
 
-                // 1. 載入 AI 模型
                 const modelURL = URL + "model.json";
                 const metadataURL = URL + "metadata.json";
                 model = await tmImage.load(modelURL, metadataURL);
                 maxPredictions = model.getTotalClasses();
 
-                // 2. 啟動 Live Cam (設定為後置鏡頭)
-                const flip = false; // 手機後置鏡頭不需要翻轉
+                const flip = false; 
                 webcam = new tmImage.Webcam(300, 300, flip); 
                 await webcam.setup({ facingMode: "environment" }); 
                 await webcam.play();
@@ -92,12 +79,11 @@
             }
         }
 
-        // 即時追蹤迴圈
         async function loop() {
             if (!isTracing) return;
-            webcam.update(); // 更新鏡頭畫面
-            await predict(); // 進行預測
-            window.requestAnimationFrame(loop); // 呼叫下一個 frame
+            webcam.update(); 
+            await predict(); 
+            window.requestAnimationFrame(loop); 
         }
 
         async function predict() {
@@ -106,7 +92,6 @@
             let highestProb = 0;
             let bestLabel = "未辨識";
 
-            // 尋找機率最高的物件
             for (let i = 0; i < maxPredictions; i++) {
                 if (prediction[i].probability > highestProb && prediction[i].probability > 0.85) { 
                     highestProb = prediction[i].probability;
@@ -114,7 +99,6 @@
                 }
             }
 
-            // 連續相同結果確認邏輯
             if (bestLabel === consecutiveLabel) {
                 consecutiveCount++;
             } else {
@@ -122,7 +106,6 @@
                 consecutiveCount = 1; 
             }
 
-            // 更新畫面 UI ("Nothing" 也會顯示為灰色待命狀態)
             const labelEl = document.getElementById("best-label");
             if (consecutiveCount < REQUIRED_CONSECUTIVE) {
                 labelEl.innerText = `${bestLabel} (確認中 ${consecutiveCount}/${REQUIRED_CONSECUTIVE})`;
@@ -132,21 +115,11 @@
                 labelEl.style.color = (bestLabel === "未辨識" || bestLabel === "Nothing") ? "#aaaaaa" : "#4CAF50"; 
             }
 
-            // ==========================================
-            // ESP8266 狀態同步邏輯 (將未辨識視為待命)
-            // ==========================================
             if (consecutiveCount >= REQUIRED_CONSECUTIVE) {
-                
                 if (bestLabel !== lastSentLabel) {
-                    
-                    // 如果是明確的物資 (Drink/First Aid) 就照常發送；
-                    // 如果是「Nothing」或「未辨識」，我們一律發送 "Nothing" 讓 ESP8266 待命！
                     let labelToSend = (bestLabel === "未辨識") ? "Nothing" : bestLabel;
-                    
                     logMessage(`🎯 狀態切換，發送同步指令: [${labelToSend}]`);
                     sendCommandToESP8266(labelToSend);
-                    
-                    // 記錄網頁大腦當前的真實狀態
                     lastSentLabel = bestLabel; 
                 }
             }
@@ -157,10 +130,8 @@
             const encodedLabel = encodeURIComponent(label); 
             const url = `http://${espIP}/sort?item=${encodedLabel}`;
             
-            // 改用 Image 物件發送請求，繞過 fetch 的嚴格 CORS 與部分 HTTPS 限制
             const img = new Image();
             img.src = url;
-            
             console.log("已嘗試發送指令:", url);
         }
     </script>
