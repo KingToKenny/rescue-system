@@ -108,47 +108,46 @@
 
             // 尋找機率最高的物件
             for (let i = 0; i < maxPredictions; i++) {
-                if (prediction[i].probability > highestProb && prediction[i].probability > 0.85) { // 85% 信心門檻
+                if (prediction[i].probability > highestProb && prediction[i].probability > 0.85) { 
                     highestProb = prediction[i].probability;
                     bestLabel = prediction[i].className;
                 }
             }
 
-            // ==========================================
-            // 新增：連續相同結果確認邏輯
-            // ==========================================
+            // 連續相同結果確認邏輯
             if (bestLabel === consecutiveLabel) {
                 consecutiveCount++;
             } else {
                 consecutiveLabel = bestLabel;
-                consecutiveCount = 1; // 標籤改變，重新計算
+                consecutiveCount = 1; 
             }
 
-            // 更新畫面 UI (加入橘色的確認中狀態提示)
+            // 更新畫面 UI ("Nothing" 也會顯示為灰色待命狀態)
             const labelEl = document.getElementById("best-label");
             if (consecutiveCount < REQUIRED_CONSECUTIVE) {
                 labelEl.innerText = `${bestLabel} (確認中 ${consecutiveCount}/${REQUIRED_CONSECUTIVE})`;
-                labelEl.style.color = "#ff9800"; // 橘色代表確認中
+                labelEl.style.color = "#ff9800"; 
             } else {
                 labelEl.innerText = bestLabel;
-                labelEl.style.color = (bestLabel === "未辨識" || bestLabel === "Empty") ? "#aaaaaa" : "#4CAF50"; // 綠色代表已鎖定
+                labelEl.style.color = (bestLabel === "未辨識" || bestLabel === "Nothing") ? "#aaaaaa" : "#4CAF50"; 
             }
 
             // ==========================================
-            // ESP8266 馬達控制邏輯 (必須連續 5 次 + 滿足球卻時間)
+            // ESP8266 馬達控制邏輯 (利用 Nothing 清除記憶)
             // ==========================================
-            const currentTime = Date.now();
-            
-            // 條件 1：連續次數達標
             if (consecutiveCount >= REQUIRED_CONSECUTIVE) {
-                // 條件 2：不是未辨識，且 (跟上次不一樣 或 已經過了冷卻時間)
-                if (bestLabel !== "未辨識" && (bestLabel !== lastSentLabel || (currentTime - lastSentTime > cooldownTime))) {
-                    
+                
+                if (bestLabel === "未辨識" || bestLabel === "Nothing") {
+                    // 當畫面淨空 (Nothing)，清除上一次的紀錄。
+                    // 確保下一次放上同類物資時，系統能再次作動。
+                    lastSentLabel = ""; 
+                } 
+                else if (bestLabel !== lastSentLabel) {
+                    // 確認是 Drink 或 First Aid，且跟上一次發送的不同
                     logMessage(`🎯 確認鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
                     sendCommandToESP8266(bestLabel);
                     
                     lastSentLabel = bestLabel;
-                    lastSentTime = currentTime;
                 }
             }
         }
