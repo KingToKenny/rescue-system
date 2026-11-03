@@ -39,7 +39,7 @@
         // ==========================================
         // ⚠️ 貼上你的 Teachable Machine 模型連結 (結尾需有 /)
         // ==========================================
-        const URL = "https://teachablemachine.withgoogle.com/models/d20G0_Y49/";
+        const URL = "https://teachablemachine.withgoogle.com/models/PjfHAbN-H/";
 
         let model, webcam, maxPredictions;
         let isTracing = false;
@@ -133,15 +133,24 @@
             }
 
             // ==========================================
-            // ESP8266 馬達控制邏輯 (利用 Nothing 清除記憶)
+            // ESP8266 狀態同步邏輯 (將未辨識視為待命)
             // ==========================================
             if (consecutiveCount >= REQUIRED_CONSECUTIVE) {
                 
-                if (bestLabel === "未辨識" || bestLabel === "Nothing") {
-                    // 當畫面淨空 (Nothing)，清除上一次的紀錄。
-                    // 確保下一次放上同類物資時，系統能再次作動。
-                    lastSentLabel = ""; 
-                } 
+                if (bestLabel !== lastSentLabel) {
+                    
+                    // 如果是明確的物資 (Drink/First Aid) 就照常發送；
+                    // 如果是「Nothing」或「未辨識」，我們一律發送 "Nothing" 讓 ESP8266 待命！
+                    let labelToSend = (bestLabel === "未辨識") ? "Nothing" : bestLabel;
+                    
+                    logMessage(`🎯 狀態切換，發送同步指令: [${labelToSend}]`);
+                    sendCommandToESP8266(labelToSend);
+                    
+                    // 記錄網頁大腦當前的真實狀態
+                    lastSentLabel = bestLabel; 
+                }
+            }
+                
                 else if (bestLabel !== lastSentLabel) {
                     // 確認是 Drink 或 First Aid，且跟上一次發送的不同
                     logMessage(`🎯 確認鎖定 [${bestLabel}] (${Math.round(highestProb*100)}%)，發送指令...`);
